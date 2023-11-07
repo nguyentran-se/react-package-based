@@ -1,0 +1,71 @@
+version: 0.1
+
+env:
+  #variables:
+  # key: "value"
+  # key: "value"
+  # parameter-store:
+  #   VITE_TIME_ZONE: /global/APP_TIME_ZONE
+  secrets-manager:
+    AWS_ACCESS_KEY_ID: $AWS_SECRET_ARN:AWS_ACCESS_KEY_ID_DEPLOYMENT
+    AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ARN:AWS_SECRET_ACCESS_KEY_DEPLOYMENT
+    AWS_S3_WEB_URL: $AWS_SECRET_ARN:AWS_S3_WEB_ADMIN_URL
+    AWS_WEB_CLOUDFRONT_DISTRIBUTION_ID: $AWS_SECRET_ARN:AWS_WEB_ADMIN_CLOUDFRONT_DISTRIBUTION_ID
+    # NODE_ENV: $AWS_SECRET_ARN:NODE_ENV
+    VITE_AWS_IDENTITY_REGION: $AWS_SECRET_ARN:AWS_REGION
+    VITE_AWS_USER_POOL_ID: $AWS_SECRET_ARN:AWS_COGNITO_USER_POOL_ID
+    VITE_AWS_USER_POOL_WEB_CLIENT_ID: $AWS_SECRET_ARN:AWS_COGNITO_USER_POOL_APP_ID
+    VITE_AWS_USER_POOL_DOMAIN: $AWS_SECRET_ARN:AWS_COGNITO_ISSUER # pragma: allowlist secret
+    # VITE_AWS_S3_ACCOUNT_SERVICE_ASSETS_URL: $AWS_SECRET_ARN:AWS_S3_ACCOUNT_SERVICE_ASSETS_URL # TODO: tin_pham update key in secret manager in QA_env
+    VITE_AWS_S3_WEB_STORAGE_ASSETS_URL: $AWS_SECRET_ARN:AWS_S3_ASSET_URL
+
+    SLACK_WEBHOOKS: $AWS_SECRET_ARN:SLACK_WEBHOOKS
+    CROSS_ACCOUNT_ROLE: $AWS_SECRET_ARN:CROSS_ACCOUNT_ROLE
+    SLACK_IDS: $AWS_SECRET_ARN:SLACK_IDS
+
+  #exported-variables:
+  # - variable
+  # - variable
+  #git-credential-helper: yes
+
+phases:
+  install:
+    commands:
+      - n 16.15.1
+  pre_build:
+    commands:
+      - npm install -g pnpm
+      - pnpm install
+  build:
+    commands:
+      # - echo NODE_ENV=production >> .env
+      # - echo VITE_VERSION=$npm_package_version >> .env
+      #prepare key
+      - export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+      - export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+      # - echo "aws_session_token = $AWS_SESSION_TOKEN" >> ~/.aws/credentials
+      #prepare env variable
+      - echo VITE_WEB_URL=$VITE_ADMIN_WEB_URL >> .env
+      - echo VITE_IDENTITY_WEB_URL=$VITE_IDENTITY_WEB_URL >> .env
+      - echo VITE_API_URL=$VITE_API_URL >> .env
+      - echo VITE_ADMIN_WEB_URL=VITE_ADMIN_WEB_URL >> .env
+      - echo VITE_APP_WEB_URL=VITE_APP_WEB_URL >> .env
+      - echo VITE_COOKIE_DOMAIN=$VITE_COOKIE_DOMAIN >> .env
+
+      - echo VITE_AWS_IDENTITY_REGION=$VITE_AWS_IDENTITY_REGION >> .env
+      - echo VITE_AWS_USER_POOL_ID=$VITE_AWS_USER_POOL_ID >> .env
+      - echo VITE_AWS_USER_POOL_WEB_CLIENT_ID=$VITE_AWS_USER_POOL_WEB_CLIENT_ID >> .env
+      - echo VITE_AWS_USER_POOL_DOMAIN=$VITE_AWS_USER_POOL_DOMAIN >> .env
+
+      # - echo VITE_AWS_S3_ACCOUNT_SERVICE_ASSETS_URL=$VITE_AWS_S3_ACCOUNT_SERVICE_ASSETS_URL >> .env # TODO: tin_pham update key in secret manager in QA_env
+      - echo VITE_AWS_S3_WEB_STORAGE_ASSETS_URL=$VITE_AWS_S3_WEB_STORAGE_ASSETS_URL >> .env
+
+      - pnpm build
+      - aws configure list-profiles #addstte
+      - aws s3 sync dist $AWS_S3_WEB_URL --delete
+      - aws cloudfront create-invalidation --distribution-id $AWS_WEB_CLOUDFRONT_DISTRIBUTION_ID --paths '/*'
+  post_build:
+    commands:
+      - echo $CODEBUILD_BUILD_SUCCEEDING
+      - echo $SLACK_IDS
+      - bash bin/build-notify.sh $CODEBUILD_BUILD_SUCCEEDING 0 $STAGE $SLACK_WEBHOOKS
